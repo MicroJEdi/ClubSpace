@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+        <meta content="utf-8" http-equiv="encoding">
+        <style>
+            html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+
+            #canvasWindow {
+                position:fixed;
+                left:0;
+                top:0;
+                width:100%;
+                height:100%;
+            }
+        </style>
+        <script>
+            let materials = [];
+            let canvasWindow;
+            let rect;
+            let canvasWindowContext;
+            let canvasWindowMousePos = {x:-1, y:-1};
+            let canvasWindowMouseDownPos = {x:-1, y:-1};
+            let materialGrabbed = null;
+            let materialGrabbedPos = {x:-1, y:-1};
+            let materialGrabbedFromCol = null;
+            let needsUpdate = false;
+            let spaceShipIcon;
+            let lumpyIcon;
+            let astroIcon;
+            let rocketIcon;
+            let alienNavbarIcon;
+            let avatarIcon;
+
+            window.onload = () => {
+                canvasWindow = document.getElementById("canvasWindow");
+                canvasWindow.width = window.innerWidth;
+                canvasWindow.height = window.innerHeight;
+                canvasWindowContext = canvasWindow.getContext('2d');
+                rect = canvasWindow.getBoundingClientRect();
+                spaceShipIcon = new Image();
+                spaceShipIcon.src = "https://img.icons8.com/nolan/64/space-shuttle.png";
+                lumpyIcon = new Image();
+                lumpyIcon.src = "https://img.icons8.com/color/48/000000/lumpy-space-princess.png";
+                astroIcon = new Image();
+                astroIcon.src = "https://img.icons8.com/color/48/000000/astronaut.png";
+                rocketIcon = new Image();
+                rocketIcon.src = "https://img.icons8.com/emoji/48/000000/rocket-emji.png";
+                alienNavbarIcon = new Image();
+                alienNavbarIcon.src = "https://img.icons8.com/windows/32/000000/satellite-sending-signal.png";
+                avatarIcon = new Image();
+                avatarIcon.src = "https://img.icons8.com/offices/30/000000/circled-user-male-skin-type-6.png";
+                createMaterials();
+                configureCanvasEvents();
+            }
+
+            const updateCanvas = () => {
+                canvasWindowContext.clearRect(0,0,canvasWindow.width, canvasWindow.height);
+                materials.forEach((material) => {
+                    let xVal = material.x+10;
+                    let yVal = material.y+50;
+                    canvasWindowContext.lineWidth = 1;
+                    canvasWindowContext.strokeStyle = material.strokeColor;
+                    canvasWindowContext.fillStyle = material.fillColor;
+                    canvasWindowContext.shadowColor = material.shadowColor;
+                    canvasWindowContext.shadowOffsetX = material.shadowOffsetX;
+                    canvasWindowContext.shadowOffsetY = material.shadowOffsetY;
+                    canvasWindowContext.shadowBlur = material.shadowBlur;
+                    canvasWindowContext.fillRect(material.x, material.y, material.width, material.height);
+                    if(material.isContainer && material.content != null) {
+                        canvasWindowContext.font = 'bold 20px serif';
+                        canvasWindowContext.textAlign = 'left';
+                        canvasWindowContext.textBaseline = 'top';
+                        canvasWindowContext.fillStyle  = 'black';
+                        canvasWindowContext.fillText(material.title, material.x+15, material.y+15);
+                        canvasWindowContext.fillText(material.content.length, material.x+material.width-25, material.y+15);
+                        material.content.forEach((element) => {
+                            if(element != materialGrabbed) {
+                                canvasWindowContext.fillStyle = "white";
+                                canvasWindowContext.fillRect(xVal, yVal, material.width-20, material.height/3.5);
+                                canvasWindowContext.fillStyle = "black";
+                                canvasWindowContext.font = '16px serif';
+                                canvasWindowContext.fillText(element.content.title, xVal+10, yVal+10);
+                                canvasWindowContext.font = '12px serif';
+                                canvasWindowContext.fillText(element.content.description, xVal+10, yVal+35);
+                                canvasWindowContext.fillStyle = element.content.tag.fillColor;
+                                canvasWindowContext.fillRect(xVal+10, yVal+60, canvasWindowContext.measureText(element.content.tag.text).width + 20, 20);
+                                canvasWindowContext.fillStyle = element.content.tag.textColor;
+                                canvasWindowContext.fillText(element.content.tag.text, xVal+20, yVal+65);
+                                canvasWindowContext.fillStyle = "black";
+                                canvasWindowContext.fillText(element.content.team, xVal+material.width-20-80, yVal+material.height/3.5-25);
+                                canvasWindowContext.drawImage(avatarIcon, xVal+material.width-20-35, yVal+material.height/3.5-35);   
+                            }
+                            yVal += (material.height/3.5+10);
+                        });
+                    }
+                });
+                canvasWindowContext.drawImage(alienNavbarIcon, 15, 15);   
+                canvasWindowContext.drawImage(avatarIcon, 15, canvasWindow.height-45);   
+                canvasWindowContext.drawImage(spaceShipIcon,canvasWindow.width/30.0+10, 15);             
+                canvasWindowContext.fillStyle = "purple";                
+                canvasWindowContext.font = 'bold 32px Courier';
+                canvasWindowContext.fillText("Club Space", canvasWindow.width/30.0+85, 33);    
+                canvasWindowContext.fillStyle = "black";   
+                canvasWindowContext.font = '24px serif';
+                canvasWindowContext.drawImage(lumpyIcon,canvasWindow.width/30.0+15, 100);  
+                canvasWindowContext.fillText("Backlog", canvasWindow.width/30.0+75, 113);
+                canvasWindowContext.drawImage(astroIcon,canvasWindow.width/30.0+15, 160);  
+                canvasWindowContext.fillText("Board", canvasWindow.width/30.0+75, 173);
+                canvasWindowContext.drawImage(rocketIcon,canvasWindow.width/30.0+15, 220);  
+                canvasWindowContext.fillText("Reports", canvasWindow.width/30.0+75, 233);
+                canvasWindowContext.drawImage(lumpyIcon,canvasWindow.width/30.0+15, 280);  
+                canvasWindowContext.fillText("Released", canvasWindow.width/30.0+75, 293);
+                canvasWindowContext.drawImage(astroIcon,canvasWindow.width/30.0+15, 340);
+                canvasWindowContext.fillText("Issues", canvasWindow.width/30.0+75, 353);
+                canvasWindowContext.drawImage(rocketIcon,canvasWindow.width/30.0+15, 400);  
+                canvasWindowContext.fillText("Settings", canvasWindow.width/30.0+75, 413);
+                canvasWindowContext.font = 'bold 48px serif';
+                canvasWindowContext.fillStyle  = 'black';
+                canvasWindowContext.fillText("Board", canvasWindow.width/5.0+15, 35);
+                if(materialGrabbed != null && materialGrabbedFromCol != null) {
+                    canvasWindowContext.fillStyle = "white";
+                    canvasWindowContext.fillRect(materialGrabbedPos.x, materialGrabbedPos.y, materialGrabbedFromCol.width-20, materialGrabbedFromCol.height/3.5);
+                    canvasWindowContext.fillStyle = "black";
+                    canvasWindowContext.font = '16px serif';
+                    canvasWindowContext.fillText(materialGrabbed.content.title, materialGrabbedPos.x+10, materialGrabbedPos.y+10);
+                    canvasWindowContext.font = '12px serif';
+                    canvasWindowContext.fillText(materialGrabbed.content.description, materialGrabbedPos.x+10, materialGrabbedPos.y+35);
+                    canvasWindowContext.fillStyle = materialGrabbed.content.tag.fillColor;
+                    canvasWindowContext.fillRect(materialGrabbedPos.x+10, materialGrabbedPos.y+60, canvasWindowContext.measureText(materialGrabbed.content.tag.text).width + 20, 20);
+                    canvasWindowContext.fillStyle = materialGrabbed.content.tag.textColor;
+                    canvasWindowContext.fillText(materialGrabbed.content.tag.text, materialGrabbedPos.x+20, materialGrabbedPos.y+65);
+                    needsUpdate = true;
+                }
+            }
+
+            const createMaterial = (title, value, isActive, x, y, z, w, h, fillColor, strokeColor, textColor, shadowColor, shadowBlur, shadowOffsetX, shadowOffsetY, isDraggable, isContainer, content) => {
+                return {title: title, value: value, isActive: isActive, x: x, y: y, z: z, width: w, height: h, fillColor: fillColor, strokeColor: strokeColor, textColor: textColor, shadowColor: shadowColor, shadowBlur: shadowBlur, shadowOffsetX: shadowOffsetX, shadowOffsetY: shadowOffsetY, isDraggable: isDraggable, isContainer: isContainer, content: content};
+            }
+
+            const createTasks = (x, yMax) => {
+                let draggableMaterials = [];
+                let column;
+                let tagFillColor;
+                switch(x) {
+                    case 0:
+                        column="To Do";
+                        tagFillColor='purple';
+                        break;
+                    case 1:
+                        column="In Progress";
+                        tagFillColor='blue';
+                        break;
+                    case 2:
+                        column="Code Review";
+                        tagFillColor='orange';
+                        break;
+                    case 3:
+                        column="Done";
+                        tagFillColor='green';
+                        break;
+                }
+                for(let y=0;y<yMax;y++) {
+                    let content = { containerTitle: column, title: "Task "+(x+y)+":", description:"Lorem Ipsum", tag: {text: "Web Dev", fillColor: tagFillColor, textColor: 'white'}, team: "TS-101", avatar: null };
+                    draggableMaterials.push({column, isDraggable: true, content: content});
+                }
+                return draggableMaterials;
+            }
+
+            const createMaterials = () => {
+                materials.push(createMaterial('Vertical Navigation', 0, false, 0, 0, 1, canvasWindow.width/5.25, canvasWindow.height, '#DDDDDD', 'black', 'black', "#DDDDDD", 5, 2, 2, false, false, null));
+                materials.push(createMaterial('NavBar', 0, false, 0, 0, 1, canvasWindow.width/30.0, canvasWindow.height, '#0000A0', 'black', 'black', "#DDDDDD", 5, 2, 2, false, false, null));
+
+                materials.push(createMaterial('To Do', 0, false, canvasWindow.width/5.0+10, canvasWindow.height/5.0, 1, canvasWindow.width/5.0-20, canvasWindow.height*5.0/6.0, '#CCCCCC', 'black', 'black', "#DDDDDD", 5, 2, 2, false, true, createTasks(0, 3)));
+                materials.push(createMaterial('In Progress', 0, false, canvasWindow.width*2.0/5.0+10, canvasWindow.height/5.0, 1, canvasWindow.width/5.0-20, canvasWindow.height*5.0/6.0, '#CCCCCC', 'black', 'black', "#DDDDDD", 5, 2, 2, false, true, createTasks(1, 4)));
+                materials.push(createMaterial('Code Review', 0, false, canvasWindow.width*3.0/5.0+10, canvasWindow.height/5.0, 1, canvasWindow.width/5.0-20, canvasWindow.height*5.0/6.0, '#CCCCCC', 'black', 'black', "#DDDDDD", 5, 2, 2, false, true, createTasks(2, 5)));
+                materials.push(createMaterial('Done', 0, false, canvasWindow.width*4.0/5.0+10, canvasWindow.height/5.0, 1, canvasWindow.width/5.0-20, canvasWindow.height*5.0/6.0, '#CCCCCC', 'black', 'black', "#DDDDDD", 5, 2, 2, false, true, createTasks(3, 1)));
+            }
+            
+            const configureCanvasEvents = () => {
+
+                canvasWindow.onmousemove = (evt) => {
+                    if(materialGrabbed != null && needsUpdate) {   
+                        canvasWindowMousePos.x = evt.clientX - rect.left;
+                        canvasWindowMousePos.y = evt.clientY - rect.top; 
+                        materialGrabbedPos.x -= canvasWindowMouseDownPos.x - canvasWindowMousePos.x;
+                        materialGrabbedPos.y -= canvasWindowMouseDownPos.y - canvasWindowMousePos.y;
+                        canvasWindowMouseDownPos.x = canvasWindowMousePos.x;
+                        canvasWindowMouseDownPos.y = canvasWindowMousePos.y;
+                        updateCanvas();
+                    }
+                }
+
+                canvasWindow.onmouseleave = (evt) => {
+                    needsUpdate = false;
+                    materialGrabbed = null;
+                    canLoadSavedCanvas = false;
+                    materialGrabbedFromCol = null;
+                    updateCanvas();
+                }
+
+                canvasWindow.onmousedown = (evt) => {
+                    canvasWindowMouseDownPos.x = evt.clientX - rect.left;
+                    canvasWindowMouseDownPos.y  = evt.clientY - rect.top; 
+                    materials.forEach((material) => {
+                        let xVal = material.x+10;
+                        let offsetX = canvasWindowMouseDownPos.x - xVal;
+                        if( material.isContainer && material.content != null && offsetX > 0 && offsetX < material.width-20 ) {
+                            let yVal = material.y+50;
+                            material.content.forEach((element) => {
+                                let offsetY = canvasWindowMouseDownPos.y - yVal;
+                                if( element.isDraggable && offsetY > 0 && offsetY < material.height/3.5 ) {
+                                    materialGrabbedPos.x = xVal;
+                                    materialGrabbedPos.y = yVal;
+                                    materialGrabbed = element;
+                                    materialGrabbedFromCol = material;
+                                    canLoadSavedCanvas = false;
+                                    needsUpdate = false;
+                                    updateCanvas();
+                                }
+                                yVal += material.height/3.5+10;
+                            });
+                        }
+                    });
+                }
+
+                canvasWindow.onmouseup = (evt) => {
+                    needsUpdate = false;
+                    canLoadSavedCanvas = false;
+                    canvasWindowMousePos.x = evt.clientX - rect.left;
+                    canvasWindowMousePos.y = evt.clientY - rect.top; 
+                    materials.forEach((material) => {
+                        if(materialGrabbed != null && materialGrabbedFromCol != null) {
+                            let xVal = material.x+10;
+                            let offsetX = canvasWindowMousePos.x - xVal;
+                            if( material.isContainer && offsetX > 0 && offsetX < material.width-20 ) {
+                                let yVal = material.y+50;
+                                let offsetY = canvasWindowMousePos.y - yVal;
+                                if( offsetY > 0 ) {
+                                    material.content.push(materialGrabbedFromCol.content.splice(materialGrabbedFromCol.content.indexOf(materialGrabbed),1)[0]);
+                                    materialGrabbed = null;
+                                    materialGrabbedFromCol = null;
+                                }
+                            }
+                        }
+                    });
+                    materialGrabbed = null;
+                    materialGrabbedFromCol = null;
+                    updateCanvas();
+                }
+            }
+        </script>
+    </head>
+    <body>
+        <canvas id="canvasWindow"></canvas>
+    </body>
+</html>

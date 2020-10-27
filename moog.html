@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+        <meta content="utf-8" http-equiv="encoding">
+        <style>
+            html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+
+            #synthCanvas {
+                position:fixed;
+                left:0;
+                top:0;
+                width:100%;
+                height:100%;
+            }
+        </style>
+        <script>
+            let synthAudioContext;
+            let synthCanvas;
+            let synthCanvasContext;
+            let sequencerCanvasMousePos;
+            let mouseOverControl;
+            let menuDisplayedControl;
+            let mouseOverMenuOption;
+            let controlSelected = false;
+            let controlGroups = [];
+
+            window.onload = () => {
+                synthAudioContext = new AudioContext();
+                synthCanvas = document.getElementById("synthCanvas");
+                synthCanvas.width = window.innerWidth;
+                synthCanvas.height = window.innerHeight;
+                synthCanvasContext = synthCanvas.getContext('2d');
+                configureMouseEvents();
+                createControls();
+                updateCanvas();
+            }
+
+            const drawLabel = (control) => {
+                synthCanvasContext.lineWidth = 1;
+                synthCanvasContext.font = '25px serif';
+                synthCanvasContext.textAlign = 'right';
+                synthCanvasContext.textBaseline = 'middle';
+                synthCanvasContext.fillStyle = control.fillColor;
+                synthCanvasContext.strokeStyle = control.textColor;
+                synthCanvasContext.strokeStyle = control.text;
+                synthCanvasContext.fillText(control.title, control.x+control.width-10, control.y+control.height/2);
+                synthCanvasContext.strokeText(control.title, control.x+control.width-10, control.y+control.height/2);
+            }
+
+            const drawSwitch = (control) => {
+                synthCanvasContext.lineWidth = 2;
+                synthCanvasContext.fillStyle = control.fillColor;
+                if(mouseOverControl && control == mouseOverControl)
+                {
+                    synthCanvasContext.fillStyle = "#CCCCCC";
+                }
+                synthCanvasContext.fillRect(control.x, control.y, control.width, control.height);
+                synthCanvasContext.strokeStyle = control.strokeColor;
+                synthCanvasContext.strokeRect(control.x, control.y,  control.width, control.height);
+                synthCanvasContext.font = '14px serif';
+                synthCanvasContext.textAlign = 'left';
+                synthCanvasContext.textBaseline = 'top';
+                synthCanvasContext.strokeStyle = control.textColor;
+                synthCanvasContext.fillStyle = control.textColor;
+                synthCanvasContext.fillText(control.title, control.x + 5, control.y + 5);
+                synthCanvasContext.font = '18px serif';
+                synthCanvasContext.textAlign = 'left';
+                synthCanvasContext.textBaseline = 'top';
+                let itemWidth = (control.width-20)/control.menuOptions.length;
+                for(let x=0;x<control.menuOptions.length;x++) {
+                    if(x == control.value) {
+                        synthCanvasContext.strokeText(control.menuOptions[x], control.x+10+itemWidth*x, control.y+control.height/2);
+                    }
+                    else {
+                        synthCanvasContext.fillText(control.menuOptions[x], control.x+10+itemWidth*x, control.y+control.height/2);
+                    }
+                }
+            }
+
+            const drawKnob = (control) => {
+                synthCanvasContext.lineWidth = 2;
+                synthCanvasContext.fillStyle = control.fillColor;
+                if(mouseOverControl && control == mouseOverControl)
+                {
+                    synthCanvasContext.fillStyle = "#CCCCCC";
+                }
+                synthCanvasContext.fillRect(control.x, control.y, control.width, control.height);
+                synthCanvasContext.strokeStyle = control.strokeColor;
+                synthCanvasContext.strokeRect(control.x, control.y,  control.width, control.height);
+                synthCanvasContext.font = '14px serif';
+                synthCanvasContext.textAlign = 'left';
+                synthCanvasContext.textBaseline = 'top';
+                synthCanvasContext.strokeStyle = control.textColor;
+                synthCanvasContext.fillStyle = control.textColor;
+                synthCanvasContext.fillText(control.title, control.x + 5, control.y + 5);
+                synthCanvasContext.font = '18px serif';
+                synthCanvasContext.textAlign = 'center';
+                synthCanvasContext.textBaseline = 'top';
+                synthCanvasContext.strokeText(control.menuOptions[control.value], control.x+control.width/2, control.y+control.height/2);
+            }
+
+            const drawKey = (control) => {
+                synthCanvasContext.lineWidth = 1;
+                synthCanvasContext.fillStyle = control.fillColor;
+                synthCanvasContext.strokeStyle = control.strokeColor;
+                if(mouseOverControl && control == mouseOverControl)
+                {
+                    synthCanvasContext.fillStyle = "#CCCCCC";
+                }
+                synthCanvasContext.fillRect(control.x, control.y, control.width, control.height);
+                synthCanvasContext.strokeRect(control.x, control.y, control.width, control.height);
+            }
+
+            const drawControlGroups = (controlAreaWidth, controlAreaHeight) => {
+                controlGroups.forEach((group) => {
+                    group.controls.forEach((control) => {
+                        switch(control.type) {
+                            case 'label':
+                                drawLabel(control);
+                                break;
+                            case 'switch':
+                                drawSwitch(control);
+                                break;
+                            case 'knob':
+                                drawKnob(control);
+                                break;
+                            case 'keyboard':
+                                drawKey(control);
+                                break;
+                            default:
+                                break;
+                        }
+                    });
+                });
+                if(menuDisplayedControl && menuDisplayedControl.isMenuDisplayed) {
+                    displayMenu(menuDisplayedControl);
+                }
+            }
+
+            const displayMenu = (control) => {
+                if(control.menuOptions == null) {
+                    return;
+                }
+                synthCanvasContext.lineWidth = 2;
+                synthCanvasContext.strokeStyle = control.textColor;
+                synthCanvasContext.fillStyle = 'white';
+                synthCanvasContext.fillRect(control.x, control.y, control.width, control.height * control.menuOptions.length);                
+                synthCanvasContext.strokeRect(control.x, control.y, control.width, control.height * control.menuOptions.length);
+                synthCanvasContext.font = '18px serif';
+                synthCanvasContext.textAlign = 'center';
+                synthCanvasContext.textBaseline = 'middle';
+                let numOptions = 0;
+                let isMouseOverOption = false;
+                control.menuOptions.forEach(option => {
+                    let offsetX = sequencerCanvasMousePos.x - control.x;
+                    let offsetY = sequencerCanvasMousePos.y - (control.y+numOptions*control.height);
+                    if( offsetX > 0 && offsetX < control.width && offsetY > 0 && offsetY < control.height ) {
+                        synthCanvasContext.fillStyle = 'grey';
+                        synthCanvasContext.fillRect(control.x, control.y+numOptions*control.height, control.width, control.height);  
+                        mouseOverMenuOption = numOptions;
+                        isMouseOverOption = true;
+                    }
+                    if( numOptions == control.value) {
+                        synthCanvasContext.strokeText(option, control.x+control.width/2, control.y+control.height/2+numOptions*control.height);
+                    }
+                    else {
+                        synthCanvasContext.fillStyle = 'black';
+                        synthCanvasContext.fillText(option, control.x+control.width/2, control.y+control.height/2+numOptions*control.height);
+                    }
+                    numOptions++;
+                });
+                synthCanvasContext.font = '14px serif';
+                synthCanvasContext.textAlign = 'left';
+                synthCanvasContext.textBaseline = 'top';
+                synthCanvasContext.strokeStyle = control.textColor;
+                synthCanvasContext.fillStyle = control.textColor;
+                synthCanvasContext.fillText(control.title, control.x + 5, control.y + 5);
+                if(!isMouseOverOption) {
+                    mouseOverMenuOption = null;
+                }
+            }
+
+            const updateCanvas = () => {
+                synthCanvasContext.clearRect(0, 0, synthCanvas.width, synthCanvas.height);
+                synthCanvasContext.fillStyle = "#DDDDDD";
+                synthCanvasContext.fillRect(0, 0, synthCanvas.width, synthCanvas.height);
+                drawControlGroups(synthCanvas.width*5/6, synthCanvas.height/3);
+            }
+
+            const createOscillatorControlGroup = (groupTitle, controlAreaWidth, controlAreaHeight, offsetX, offsetY, controlsPerRow = 6, controlsCol = 1) => {
+                let controlWidth = controlAreaWidth / controlsPerRow;
+                let controlHeight = controlAreaHeight / controlsCol;
+                let controls = [];
+                let controlCount = 0;
+                controls.push(createLabel(groupTitle, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'black', 'black'));
+                controls.push(createSwitch("Power", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                controls.push(createKnob("Level", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                controls.push(createKnob("Octave", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                controls.push(createKnob("Wave Type", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                return {controls: controls};
+            }
+
+            const createFilterControlGroup = (groupTitle, controlAreaWidth, controlAreaHeight, offsetX, offsetY, controlsPerRow = 6, controlsCol = 1) => {
+                let controlWidth = controlAreaWidth / controlsPerRow;
+                let controlHeight = controlAreaHeight / controlsCol;
+                let controls = [];
+                let controlCount = 0;
+                controls.push(createLabel(groupTitle, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'black', 'black'));
+                controls.push(createKnob("Cutoff", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                controls.push(createKnob("Spacing", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                controls.push(createKnob("Resonance", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                controls.push(createKnob("KB Cont Amt", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                controls.push(createSwitch("Filter Type", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                return {controls: controls};
+            }
+
+            const createEnvelopeControlGroup = (groupTitle, controlAreaWidth, controlAreaHeight, offsetX, offsetY, controlsPerRow = 6, controlsCol = 1) => {
+                let controlWidth = controlAreaWidth / controlsPerRow;
+                let controlHeight = controlAreaHeight / controlsCol;
+                let controls = [];
+                let controlCount = 0;
+                controls.push(createLabel(groupTitle, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'black', 'black'));
+                controls.push(createKnob("Attack", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                controls.push(createKnob("Decay", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                controls.push(createKnob("Sustain", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                controls.push(createKnob("Release", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                if(groupTitle == "Filter Envelope") {
+                    controls.push(createKnob("Amount To Filter", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                }
+                else if(groupTitle == "Volume Envelope") {
+                    controls.push(createSwitch("Envelope Gate", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                }
+                return {controls: controls};
+            }
+
+            const createModulationControlGroup = (groupTitle, controlAreaWidth, controlAreaHeight, offsetX, offsetY, controlsPerRow = 6, controlsCol = 1) => {
+                let controlWidth = controlAreaWidth / controlsPerRow;
+                let controlHeight = controlAreaHeight / controlsCol;
+                let controls = [];
+                let controlCount = 0;
+                controls.push(createLabel(groupTitle, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'black', 'black'));
+                controls.push(createKnob("Source", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                controls.push(createKnob("Shaping", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                controls.push(createKnob("Destination", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                controls.push(createKnob("Amount", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                return {controls: controls};
+            }
+
+            const createLFOControlGroup = (groupTitle, controlAreaWidth, controlAreaHeight, offsetX, offsetY, controlsPerRow = 6, controlsCol = 1) => {
+                let controlWidth = controlAreaWidth / controlsPerRow;
+                let controlHeight = controlAreaHeight / controlsCol;
+                let controls = [];
+                let controlCount = 0;
+                controls.push(createLabel(groupTitle, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'black', 'black'));
+                controls.push(createSwitch("Rate", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                controls.push(createKnob("LFO Sync", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                controls.push(createKnob("Fine Tune", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                controls.push(createKnob("Glide Rate", false, 0, offsetX+controlWidth*controlCount++, offsetY, controlWidth, controlHeight, '#000000', 'white', 'black', ['0Hz', '10Hz', '100Hz', '1kHz', '21kHz']));
+                return {controls: controls};
+            }
+
+            const createKeyboardControlGroup = (controlType, controlAreaWidth, controlAreaHeight, controlsPerRow, controlsCol, offsetX, offsetY, strokeColor, fillColor, textColor, title = null) => {
+                let controlWidth = controlAreaWidth / controlsPerRow;
+                let controlHeight = controlAreaHeight / controlsCol;
+                let controls = [];
+                for(let x=0;x<controlsPerRow;x++) {
+                    for(let y=0;y<controlsCol;y++) {
+                        controls.push({ type: controlType, isActive: false, value: (x+(y*(controlsPerRow))), x: ( offsetX + ( (controlWidth) * x) ) , y: ( offsetY + ( (controlHeight) * y) ), width: controlWidth, height: controlHeight, strokeColor: strokeColor, fillColor: fillColor, textColor: textColor });  
+                        switch(x%7) {
+                            case 1:
+                            case 2:
+                            case 4:
+                            case 5:
+                            case 6:
+                            controls.push({ type: controlType, isActive: false, value: (x+(y*(controlsPerRow))-0.5), x: (offsetX + ( (controlWidth) * x) - ( controlWidth/4) ) , y: ( offsetY + ( (controlHeight) * y) ), width: controlWidth/2, height: controlHeight/2, strokeColor: fillColor, fillColor: strokeColor, textColor: textColor });   
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                }
+                return {controls: controls};
+            }
+
+            const createLabel = (title, x, y, width, height, strokeColor, fillColor, textColor) => {
+                return { title: title, type: 'label', x: x, y: y, width: width, height: height, strokeColor: strokeColor, fillColor: fillColor, textColor: textColor };
+            }
+
+            const createKnob = (title, isActive, value, x, y, width, height, strokeColor, fillColor, textColor, menuOptions) => {
+                return { title: title, type: 'knob', isActive: isActive, value: value, x: x, y: y, width: width, height: height, strokeColor: strokeColor, fillColor: fillColor, textColor: textColor, menuOptions: menuOptions, isMenuDisplayed: false };
+            }
+
+            const createSwitch = (title, isActive, value, x, y, width, height, strokeColor, fillColor, textColor, menuOptions) => {
+                return { title: title, type: 'switch', isActive: isActive, value: value, x: x, y: y, width: width, height: height, strokeColor: strokeColor, fillColor: fillColor, textColor: textColor, menuOptions: menuOptions, isMenuDisplayed: false };
+            }
+
+            const createControls = () => {
+                let controlAreaHeight = synthCanvas.height/2.0/7.0;
+                controlGroups.push(createOscillatorControlGroup("Oscillator 1", synthCanvas.width, controlAreaHeight, 0, 0));
+                controlGroups.push(createOscillatorControlGroup("Oscillator 2", synthCanvas.width, controlAreaHeight, 0, controlAreaHeight));
+                controlGroups.push(createFilterControlGroup("Filters", synthCanvas.width, controlAreaHeight, 0, controlAreaHeight*2));
+                controlGroups.push(createEnvelopeControlGroup("Filter Envelope", synthCanvas.width, controlAreaHeight, 0, controlAreaHeight*3));
+                controlGroups.push(createEnvelopeControlGroup("Volume Envelope", synthCanvas.width, controlAreaHeight, 0, controlAreaHeight*4));
+                controlGroups.push(createModulationControlGroup("Mod Wheel", synthCanvas.width, controlAreaHeight, 0, controlAreaHeight*5));
+                controlGroups.push(createLFOControlGroup("LFO", synthCanvas.width, controlAreaHeight, 0, controlAreaHeight*6));
+                controlGroups.push(createKeyboardControlGroup('keyboard', synthCanvas.width , synthCanvas.height*1.0/2.0-10, 36, 1, 0, synthCanvas.height/2.0+10, 'black', 'white', 'black'));
+            }
+
+            const handleCanvasMouseMove = (evt) => {
+                let rect = synthCanvas.getBoundingClientRect();
+                sequencerCanvasMousePos = { x: evt.clientX - rect.left, y: evt.clientY - rect.top };   
+                if(controlSelected  == false) {
+                    controlGroups.forEach((controlGroup) => {
+                        controlGroup.controls.forEach((control) => {
+                            let offsetX = sequencerCanvasMousePos.x - control.x;
+                            let offsetY = sequencerCanvasMousePos.y - control.y;
+                            if( offsetX > 0 && offsetX < control.width && offsetY > 0 && offsetY < control.height ) {
+                                mouseOverControl = control;
+                            }
+                            else if( mouseOverControl == control ) {
+                                mouseOverControl = null;
+                            }
+                        })
+                    });
+                }
+                else if(mouseOverControl && mouseOverControl.dragControl != null) {
+                    mouseOverControl.dragControl(this.mouseOverControl);
+                }
+                updateCanvas();
+            }
+
+            const configureMouseEvents = () => {
+                synthCanvas.onmousemove = handleCanvasMouseMove;
+
+                synthCanvas.onmouseleave = (evt) => {
+                    controlSelected = false;
+                    mouseOverControl = null;
+                    handleCanvasMouseMove(evt);
+                }
+
+                synthCanvas.onmousedown = (evt) => {
+                    if(menuDisplayedControl != null && mouseOverMenuOption != null) {
+                        menuDisplayedControl.value = mouseOverMenuOption;
+                        menuDisplayedControl.isMenuDisplayed = false;
+                        menuDisplayedControl = null;
+                    }
+                    else if(mouseOverControl && mouseOverControl.type != 'label') {
+                        controlSelected = true;
+                        switch(mouseOverControl.type) {
+                            case 'knob':
+                                if(menuDisplayedControl != null) {
+                                    menuDisplayedControl.isMenuDisplayed = false;
+                                }
+                                menuDisplayedControl = mouseOverControl;
+                                menuDisplayedControl.isMenuDisplayed = true;
+                                break;
+                            case 'switch':
+                                if(menuDisplayedControl != null) {
+                                    menuDisplayedControl.isMenuDisplayed = false;
+                                    menuDisplayedControl = null;
+                                }
+                                mouseOverControl.value = Math.floor((sequencerCanvasMousePos.x - mouseOverControl.x)*mouseOverControl.menuOptions.length/mouseOverControl.width);
+                                break;
+                            case 'keyboard':
+                                if(menuDisplayedControl != null) {
+                                    menuDisplayedControl.isMenuDisplayed = false;
+                                    menuDisplayedControl = null;
+                                }
+                                playSound();
+                                break;
+                            default:
+                                controlSelected = false;
+                                break;
+                        }
+                    }
+                    else if(menuDisplayedControl != null) {
+                        menuDisplayedControl.isMenuDisplayed = false;
+                        menuDisplayedControl = null;
+                    }
+                    handleCanvasMouseMove(evt);
+                }
+
+                synthCanvas.onmouseup = (evt) => {
+                    const imageData = synthCanvasContext.createImageData( synthCanvas.width, synthCanvas.height);
+                    console.log(imageData);
+                    controlSelected = false;
+                    handleCanvasMouseMove(evt);
+                }
+            }
+
+            const playSound = () => {
+                let note = noteFrequencies[mouseOverControl.value%7];
+                let octave = Math.floor(mouseOverControl.value/7)+4;
+                let pitch = Math.pow(2,octave)*note;
+                let osc = synthAudioContext.createOscillator();
+                osc.frequency.value = pitch;
+                osc.connect(synthAudioContext.destination);
+                osc.start();
+                osc.stop(synthAudioContext.currentTime + 2);
+            }
+
+            const noteFrequencies = {
+                0 : 16.35,
+                0.5 : 17.32,
+                1 : 18.35,
+                1.5 : 19.45,
+                2 : 20.6,
+                3 : 21.83,
+                3.5 : 23.12,
+                4 : 24.5,
+                4.5 : 25.96,
+                5 : 27.5,
+                5.5 : 29.14,
+                6 : 30.87, 
+            }
+        </script>
+    </head>
+    <body>
+        <canvas id="synthCanvas"></canvas>
+    </body>
+</html>
